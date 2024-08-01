@@ -131,7 +131,7 @@ const pcapFilePath = path.join(__dirname, 'Mypcap.pcap');
 const outputFilePath = path.join(__dirname, 'output.txt'); // Path for the output file
 
 // Full path to tshark executable
-const tsharkPath = process.platform === 'win32' ? 'C:\\Program Files\\Wireshark\\tshark.exe' : '/usr/bin/tshark';
+const tsharkPath = 'C:\\Program Files\\Wireshark\\tshark.exe';
 
 // Enable CORS
 app.use(cors());
@@ -140,74 +140,131 @@ app.use(cors());
 app.get('/api/pcap-data', (req, res) => {
   const command = `"${tsharkPath}" -r "${pcapFilePath}" -T json > "${outputFilePath}"`;
 
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      res.status(500).send(`Error executing tshark: ${error.message}`);
+  // exec(command, (error, stdout, stderr) => {
+  //   if (error) {
+  //     res.status(500).send(`Error executing tshark: ${error.message}`);
+  //     return;
+  //   }
+  //   if (stderr) {
+  //     res.status(500).send(`Error: ${stderr}`);
+  //     return;
+  //   }
+
+  //   // Read the output file and send its content as response
+  //   fs.readFile(outputFilePath, 'utf8', (readError, data) => {
+  //     if (readError) {
+  //       res.status(500).send(`Error reading output file: ${readError.message}`);
+  //       return;
+  //     }
+
+  //     try {
+  //       const packets = JSON.parse(data);
+  //       const formattedPackets = packets.map((packet) => {
+  //         const biccData = packet._source?.layers?.bicc;
+  //         const time = packet._source?.layers?.frame?.['frame.time'];
+
+  //         // Safely access the properties
+  //         const callingPartyNumber =
+  //           biccData?.[
+  //             'Parameter: (t=10, l=7) Calling party number: Calling party numberCalling Party Number: 933259422'
+  //           ]?.['isup.calling'] || 'N/A';
+
+  //         const calledPartyNumber =
+  //           biccData?.[
+  //             'Called Party NumberCalled Party Number: 244920200591F'
+  //           ]?.['isup.called'] || 'N/A';
+
+  //         const countryCode =
+  //           calledPartyNumber !== 'N/A' ? calledPartyNumber.slice(0, 3) : 'N/A';
+
+  //         const msisdn =
+  //           biccData?.[
+  //             'Called Party NumberCalled Party Number: 244920200591F'
+  //           ]?.['isup.called_tree']?.['e164.msisdn'] || 'N/A';
+
+  //         const locationNumber =
+  //           biccData?.[
+  //             'Parameter: (t=63, l=8) Location number: Location numberLocation number: 244920043401'
+  //           ]?.['isup.location_number'] || 'N/A';
+
+  //         const locationCountryCode =
+  //           locationNumber !== 'N/A' ? locationNumber.slice(0, 3) : 'N/A';
+
+  //         return {
+  //           time: time || 'N/A',
+  //           callingPartyNumber,
+  //           calledPartyNumber,
+  //           countryCode,
+  //           msisdn,
+  //           locationNumber,
+  //           locationCountryCode,
+  //         };
+  //       });
+
+  //       res.json(formattedPackets);
+  //     } catch (parseError) {
+  //       res
+  //         .status(500)
+  //         .send(`Error parsing output file: ${parseError.message}`);
+  //     }
+  //   });
+  // });
+
+  // Read the output file and send its content as response
+  fs.readFile(outputFilePath, 'utf8', (readError, data) => {
+    if (readError) {
+      res.status(500).send(`Error reading output file: ${readError.message}`);
       return;
     }
-    if (stderr) {
-      res.status(500).send(`Error: ${stderr}`);
-      return;
+
+    try {
+      const packets = JSON.parse(data);
+      const formattedPackets = packets.map((packet) => {
+        const biccData = packet._source?.layers?.bicc;
+        const time = packet._source?.layers?.frame?.['frame.time'];
+
+        // Safely access the properties
+        const callingPartyNumber =
+          biccData?.[
+            'Parameter: (t=10, l=7) Calling party number: Calling party numberCalling Party Number: 933259422'
+          ]?.['isup.calling'] || 'N/A';
+
+        const calledPartyNumber =
+          biccData?.['Called Party NumberCalled Party Number: 244920200591F']?.[
+            'isup.called'
+          ] || 'N/A';
+
+        const countryCode =
+          calledPartyNumber !== 'N/A' ? calledPartyNumber.slice(0, 3) : 'N/A';
+
+        const msisdn =
+          biccData?.['Called Party NumberCalled Party Number: 244920200591F']?.[
+            'isup.called_tree'
+          ]?.['e164.msisdn'] || 'N/A';
+
+        const locationNumber =
+          biccData?.[
+            'Parameter: (t=63, l=8) Location number: Location numberLocation number: 244920043401'
+          ]?.['isup.location_number'] || 'N/A';
+
+        const locationCountryCode =
+          locationNumber !== 'N/A' ? locationNumber.slice(0, 3) : 'N/A';
+
+        return {
+          time: time || 'N/A',
+          callingPartyNumber,
+          calledPartyNumber,
+          countryCode,
+          msisdn,
+          locationNumber,
+          locationCountryCode,
+        };
+      });
+
+      res.json(formattedPackets);
+    } catch (parseError) {
+      res.status(500).send(`Error parsing output file: ${parseError.message}`);
     }
-
-    // Read the output file and send its content as response
-    fs.readFile(outputFilePath, 'utf8', (readError, data) => {
-      if (readError) {
-        res.status(500).send(`Error reading output file: ${readError.message}`);
-        return;
-      }
-
-      try {
-        const packets = JSON.parse(data);
-        const formattedPackets = packets.map((packet) => {
-          const biccData = packet._source?.layers?.bicc;
-          const time = packet._source?.layers?.frame?.['frame.time'];
-
-          // Safely access the properties
-          const callingPartyNumber =
-            biccData?.[
-              'Parameter: (t=10, l=7) Calling party number: Calling party numberCalling Party Number: 933259422'
-            ]?.['isup.calling'] || 'N/A';
-
-          const calledPartyNumber =
-            biccData?.[
-              'Called Party NumberCalled Party Number: 244920200591F'
-            ]?.['isup.called'] || 'N/A';
-
-          const countryCode =
-            calledPartyNumber !== 'N/A' ? calledPartyNumber.slice(0, 3) : 'N/A';
-
-          const msisdn =
-            biccData?.[
-              'Called Party NumberCalled Party Number: 244920200591F'
-            ]?.['isup.called_tree']?.['e164.msisdn'] || 'N/A';
-
-          const locationNumber =
-            biccData?.[
-              'Parameter: (t=63, l=8) Location number: Location numberLocation number: 244920043401'
-            ]?.['isup.location_number'] || 'N/A';
-
-          const locationCountryCode =
-            locationNumber !== 'N/A' ? locationNumber.slice(0, 3) : 'N/A';
-
-          return {
-            time: time || 'N/A',
-            callingPartyNumber,
-            calledPartyNumber,
-            countryCode,
-            msisdn,
-            locationNumber,
-            locationCountryCode,
-          };
-        });
-
-        res.json(formattedPackets);
-      } catch (parseError) {
-        res
-          .status(500)
-          .send(`Error parsing output file: ${parseError.message}`);
-      }
-    });
   });
 });
 
