@@ -131,7 +131,7 @@ const pcapFilePath = path.join(__dirname, 'Mypcap.pcap');
 const outputFilePath = path.join(__dirname, 'output.txt'); // Path for the output file
 
 // Full path to tshark executable
-const tsharkPath = `C:\\Program Files\\Wireshark\\tshark.exe`; // Update this path if necessary
+const tsharkPath = process.platform === 'win32' ? 'C:\\Program Files\\Wireshark\\tshark.exe' : '/usr/bin/tshark';
 
 // Enable CORS
 app.use(cors());
