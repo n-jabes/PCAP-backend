@@ -301,7 +301,7 @@ app.listen(port, () => {
 // // MongoDB connection with better error handling and logging
 // mongoose
 //   .connect(
-//     'mongodb+srv://jabes:nshtui42@jabesdatabases.cthh7.mongodb.net/PcapStorage?retryWrites=true&w=majority&appName=jabesDatabases',
+//     process.env.MONGO_URL,
 //     {
 //       useNewUrlParser: true,
 //       useUnifiedTopology: true,
