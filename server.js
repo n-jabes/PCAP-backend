@@ -2,158 +2,92 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { exec } from 'child_process'; // used to execute the tshark command to read from .pcap and write to .txt
 import cors from 'cors';
 
 const app = express();
 const port = 3000;
 
-// Derive __dirname from import.meta.url
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const pcapFilePath = path.join(__dirname, 'Mypcap.pcap');
-const outputFilePath = path.join(__dirname, 'output.txt'); // Path for the output file
+const inputFilePath = path.join(__dirname, 'list_subscribers_result_10.txt');
 
-// Full path to tshark executable
-const tsharkPath = 'C:\\Program Files\\Wireshark\\tshark.exe';
-
-// Enable CORS
 app.use(cors());
 
-// Endpoint to read and parse the .pcap file using tshark
-app.get('/api/pcap-data', (req, res) => {
-  const command = `"${tsharkPath}" -r "${pcapFilePath}" -T json > "${outputFilePath}"`;
-
-  // exec(command, (error, stdout, stderr) => {
-  //   if (error) {
-  //     res.status(500).send(`Error executing tshark: ${error.message}`);
-  //     return;
-  //   }
-  //   if (stderr) {
-  //     res.status(500).send(`Error: ${stderr}`);
-  //     return;
-  //   }
-
-  //   // Read the output file and send its content as response
-  //   fs.readFile(outputFilePath, 'utf8', (readError, data) => {
-  //     if (readError) {
-  //       res.status(500).send(`Error reading output file: ${readError.message}`);
-  //       return;
-  //     }
-
-  //     try {
-  //       const packets = JSON.parse(data);
-  //       const formattedPackets = packets.map((packet) => {
-  //         const biccData = packet._source?.layers?.bicc;
-  //         const time = packet._source?.layers?.frame?.['frame.time'];
-
-  //         // Safely access the properties
-  //         const callingPartyNumber =
-  //           biccData?.[
-  //             'Parameter: (t=10, l=7) Calling party number: Calling party numberCalling Party Number: 933259422'
-  //           ]?.['isup.calling'] || 'N/A';
-
-  //         const calledPartyNumber =
-  //           biccData?.[
-  //             'Called Party NumberCalled Party Number: 244920200591F'
-  //           ]?.['isup.called'] || 'N/A';
-
-  //         const countryCode =
-  //           calledPartyNumber !== 'N/A' ? calledPartyNumber.slice(0, 3) : 'N/A';
-
-  //         const msisdn =
-  //           biccData?.[
-  //             'Called Party NumberCalled Party Number: 244920200591F'
-  //           ]?.['isup.called_tree']?.['e164.msisdn'] || 'N/A';
-
-  //         const locationNumber =
-  //           biccData?.[
-  //             'Parameter: (t=63, l=8) Location number: Location numberLocation number: 244920043401'
-  //           ]?.['isup.location_number'] || 'N/A';
-
-  //         const locationCountryCode =
-  //           locationNumber !== 'N/A' ? locationNumber.slice(0, 3) : 'N/A';
-
-  //         return {
-  //           time: time || 'N/A',
-  //           callingPartyNumber,
-  //           calledPartyNumber,
-  //           countryCode,
-  //           msisdn,
-  //           locationNumber,
-  //           locationCountryCode,
-  //         };
-  //       });
-
-  //       res.json(formattedPackets);
-  //     } catch (parseError) {
-  //       res
-  //         .status(500)
-  //         .send(`Error parsing output file: ${parseError.message}`);
-  //     }
-  //   });
-  // });
-
-  // Read the output file and send its content as response
-  fs.readFile(outputFilePath, 'utf8', (readError, data) => {
+app.get('/api/subscriber-data', (req, res) => {
+  fs.readFile(inputFilePath, 'utf8', (readError, data) => {
     if (readError) {
-      res.status(500).send(`Error reading output file: ${readError.message}`);
+      res.status(500).send(`Error reading input file: ${readError.message}`);
       return;
     }
 
     try {
-      const packets = JSON.parse(data);
-      const formattedPackets = packets.map((packet) => {
-        const biccData = packet._source?.layers?.bicc;
-        const time = packet._source?.layers?.frame?.['frame.time'];
+      const lines = data.split('\n');
+      const headerIndex = lines.findIndex((line) => line.startsWith('IMSI'));
+      const statisticsIndex = lines.findIndex((line) =>
+        line.includes('Subscriber statistics')
+      );
 
-        // Safely access the properties
-        const callingPartyNumber =
-          biccData?.[
-            'Parameter: (t=10, l=7) Calling party number: Calling party numberCalling Party Number: 933259422'
-          ]?.['isup.calling'] || '';
+      // If statisticsIndex is not found, use the entire rest of the file
+      const dataLines = lines.slice(
+        headerIndex + 1,
+        statisticsIndex !== -1 ? statisticsIndex : undefined
+      );
 
-        const calledPartyNumber =
-          biccData?.['Called Party NumberCalled Party Number: 244920200591F']?.[
-            'isup.called'
-          ] || '';
+      // Extract the start time from the file
+      const startTimeLine = lines.find((line) =>
+        line.startsWith('Start time:')
+      );
+      const startTime = startTimeLine
+        ? startTimeLine.split(': ')[1].trim()
+        : '';
 
-        const countryCode =
-          calledPartyNumber !== 'N/A' ? calledPartyNumber.slice(0, 3) : '';
+      const subscribers = dataLines
+        .filter((line) => line.trim() !== '' && !line.startsWith('---'))
+        .map((line) => {
+          const [
+            IMSI,
+            MSISDN,
+            IMEI,
+            AP,
+            DP,
+            R,
+            LteM,
+            MM,
+            NB,
+            RANId,
+            Location,
+            UeUsageType,
+            HssRealm,
+            HssResetId,
+          ] = line.split(/\s+/);
 
-        const msisdn =
-          biccData?.['Called Party NumberCalled Party Number: 244920200591F']?.[
-            'isup.called_tree'
-          ]?.['e164.msisdn'] || '';
+          return {
+            time: startTime,
+            IMSI,
+            MSISDN,
+            IMEI,
+            AP,
+            DP,
+            R,
+            LteM,
+            MM,
+            NB,
+            RANId,
+            Location,
+            UeUsageType,
+            HssRealm,
+            HssResetId,
+          };
+        });
 
-        const locationNumber =
-          biccData?.[
-            'Parameter: (t=63, l=8) Location number: Location numberLocation number: 244920043401'
-          ]?.['isup.location_number'] || '';
-
-        const locationCountryCode =
-          locationNumber !== 'N/A' ? locationNumber.slice(0, 3) : '';
-
-        return {
-          time: time || '',
-          callingPartyNumber,
-          calledPartyNumber,
-          countryCode,
-          msisdn,
-          locationNumber,
-          locationCountryCode,
-        };
-      });
-
-      res.json(formattedPackets);
+      res.json(subscribers);
     } catch (parseError) {
-      res.status(500).send(`Error parsing output file: ${parseError.message}`);
+      res.status(500).send(`Error parsing input file: ${parseError.message}`);
     }
   });
 });
 
-// Start the server
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
