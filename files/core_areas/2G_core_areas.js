@@ -1,4 +1,4 @@
-const Locations = [
+const data = [
   {
     "Core Location": "Byumba",
     "MCC": "635",
@@ -48882,4 +48882,4 @@ const Locations = [
   }
 ];
 
-export default Locations;
+export default data;

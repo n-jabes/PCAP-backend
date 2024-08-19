@@ -1,4 +1,7 @@
-
+import xlsx from 'xlsx';
+import fs from 'fs/promises';
+// import { parseString } from 'xml2js';
+// import { promisify } from 'util';
 import express from 'express';
 import { MongoClient, GridFSBucket } from 'mongodb';
 import multer from 'multer';
@@ -139,10 +142,103 @@ function parseFileData(data) {
     });
 }
 
-// |Function to convert a certain excel file into a json file
-// const inputPath = 'D:\\work\\Ernest\\server\\files\\core_areas\\2G_core_areas.xls';
-// const outputPath = 'D:\\work\\Ernest\\server\\files\\core_areas\\2G_core_areas.js';
-// convertExcelToJs(inputPath, outputPath);
+// New endpoint to upload and process locations file
+app.post('/api/upload-locations', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).send('No file uploaded');
+  }
+
+  try {
+    // Read the uploaded Excel file
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    // Convert to JSON
+    const jsonData = xlsx.utils.sheet_to_json(sheet);
+
+    // Generate KML
+    const kml = generateKML(jsonData);
+
+    // Store KML in database
+    const result = await db.collection('kml_locations').insertOne({
+      filename: req.file.originalname,
+      kml: kml,
+      createdAt: new Date(),
+    });
+
+    res.status(200).json({
+      message: 'Locations file processed and stored successfully',
+      kmlId: result.insertedId,
+    });
+  } catch (error) {
+    console.error('Error processing locations file:', error);
+    res.status(500).send('Error processing locations file');
+  }
+});
+
+// Function to generate KML from JSON data
+function generateKML(locations) {
+  let placemarksContent = '';
+
+  locations.forEach((location) => {
+    placemarksContent += `
+    <Placemark>
+      <name>${location['Site Name']}</name>
+      <description>
+        Core Location: ${location['Core Location']}
+        MCC: ${location['MCC']}
+        MNC: ${location['MNC']}
+        LAC: ${location['LAC(*)']}
+        RAC: ${location['RAC']}
+        CI: ${location['CI(*)']}
+        Sector Location: ${location['Sector Location']}
+        Azimuth: ${location['Azimuth(*)']}
+      </description>
+      <Point>
+        <coordinates>${location['Longitude']},${location['Latitude']},0</coordinates>
+      </Point>
+    </Placemark>`;
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>2G Core Areas</name>
+    <description>2G Core Areas in KML format</description>
+    ${placemarksContent}
+  </Document>
+</kml>`;
+}
+
+// New endpoint to retrieve KML data
+app.get('/api/kml/:id', async (req, res) => {
+  try {
+    const kmlDoc = await db.collection('kml_locations').findOne({
+      _id: new ObjectId(req.params.id),
+    });
+
+    if (!kmlDoc) {
+      return res.status(404).send('KML not found');
+    }
+
+    res.set('Content-Type', 'application/vnd.google-earth.kml+xml');
+    res.set(
+      'Content-Disposition',
+      `attachment; filename="${kmlDoc.filename}.kml"`
+    );
+    res.send(kmlDoc.kml);
+  } catch (error) {
+    console.error('Error retrieving KML:', error);
+    res.status(500).send('Error retrieving KML');
+  }
+});
+
+// Function to covert xlsx to js
+// convertExcelToJs(
+//   './files/core_areas/4G_core_areas.xlsx',
+//   './files/core_areas/4G_core_areas.js'
+// );
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
